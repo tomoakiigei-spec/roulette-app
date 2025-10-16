@@ -1,0 +1,669 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>キラキラ抽選☆ルーレット</title>
+    <!-- Tailwind CSS CDN for modern styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tone.js for sound generation (Drum Roll & BGM) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                }
+            }
+        }
+    </script>
+    <style>
+        /* 背面をパステルカラーにし、スクロール可能にする */
+        body {
+            background-color: #e0f7fa; /* パステル水色 */
+            background-image: 
+                repeating-linear-gradient(45deg, rgba(255, 255, 255, 0.3) 0, rgba(255, 255, 255, 0.3) 2px, transparent 2px, transparent 10px),
+                repeating-linear-gradient(-45deg, rgba(255, 255, 255, 0.3) 0, rgba(255, 255, 255, 0.3) 2px, transparent 2px, transparent 10px);
+            padding-bottom: 50px;
+            position: relative;
+            overflow-x: hidden; /* 横スクロールは禁止 */
+        }
+
+        /* ルーレット本体のカスタムCSS - 影を外し枠線デザインに変更 */
+        .wheel-container {
+            position: relative;
+            width: 450px; /* 初期値として修正 */
+            height: 450px; /* 初期値として修正 */
+            margin: 40px auto;
+            border-radius: 50%;
+            /* 枠のようなデザインに変更: 二重のボーダーと薄い影 */
+            border: 8px solid #f8bbd0; /* パステルピンクの太い枠 */
+            box-shadow: 0 0 0 5px #ffffff, 0 10px 30px rgba(0, 0, 0, 0.15); /* 白い内枠と外側の影 */
+            background-color: #ffffff;
+            transition: width 0.3s, height 0.3s; /* サイズ変更アニメーション */
+        }
+
+        #wheel {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            /* transition時間はJavaScriptで動的に設定されます */
+            transition: transform 5s cubic-bezier(0.2, 0.8, 0.2, 1); 
+            position: relative;
+        }
+
+        /* 矢印（ポインター） */
+        .pointer {
+            position: absolute;
+            top: 0; /* コンテナの上端に配置 */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-top: 25px solid #d9534f; /* ▼を下向きに変更 */
+            z-index: 10;
+            filter: drop-shadow(0 2px 2px rgba(0,0,0,0.5));
+        }
+
+        /* ルーレットの中心を飾る円 */
+        #wheel::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 30px;
+            height: 30px;
+            background-color: #fff;
+            border: 3px solid #d9534f;
+            border-radius: 50%;
+            z-index: 5;
+        }
+
+        /* ルーレット内のラベルコンテナ */
+        .label-container {
+            position: absolute;
+            inset: 0;
+        }
+
+        /* ラベルテキストのスタイル */
+        .wheel-label-text {
+            /* 中央から外側にずらした位置 */
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 50%; 
+            height: 1.5rem; 
+            transform-origin: 0% 50%; 
+        }
+
+        .result-animate {
+            animation: pulse 1s infinite alternate;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            100% { transform: scale(1.05); }
+        }
+
+    </style>
+</head>
+<body class="p-5 flex flex-col items-center font-sans">
+
+    <div class="max-w-4xl w-full">
+        <h1 class="text-4xl font-extrabold text-gray-800 mb-8 text-center">🐶 キラキラ抽選☆ルーレット 🐱</h1>
+        
+        <!-- 説明/インフォメーション -->
+        <div class="bg-blue-100 border-l-4 border-blue-500 text-blue-800 p-4 mb-8 rounded-lg shadow-md">
+            <p class="font-semibold">💡 使い方:</p>
+            <ul class="list-disc list-inside ml-4 text-sm">
+                <li>**例で表示している名前を参加者の名前に書き替えましょう**。すぐに「ルーレットスタート！」を押せます。</li>
+                <li>入力値を変更する場合は、上書きするか削除して「ルーレットを準備」を押してください。</li>
+            </ul>
+        </div>
+
+        <!-- 入力エリア -->
+        <div class="flex flex-col md:flex-row gap-6 mb-8">
+            
+            <div class="flex-1 bg-white p-6 rounded-xl shadow-lg">
+                <label for="names" class="block text-lg font-bold text-gray-700 mb-2">📝 参加者名 貼り付け欄</label>
+                <!-- デフォルトで10名の仮の名前を挿入 -->
+                <textarea id="names" class="w-full h-40 p-3 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500 text-gray-800">太郎
+花子
+次郎
+三郎
+由美
+健太
+さやか
+和樹
+美咲
+大輔</textarea>
+                <p class="text-xs text-gray-500 mt-1">※最大50名程度推奨。上記は仮の名前です。</p>
+            </div>
+
+            <div class="flex-1 bg-white p-6 rounded-xl shadow-lg">
+                <label for="weights" class="block text-lg font-bold text-gray-700 mb-2">✖️ 倍率 貼り付け欄 (数字)</label>
+                <!-- デフォルトで倍率1を挿入 -->
+                <textarea id="weights" class="w-full h-40 p-3 border border-gray-300 rounded-lg focus:ring-pink-500 focus:border-pink-500 text-gray-800">1
+1
+1
+1
+1
+1
+1
+1
+1
+1</textarea>
+                <p class="text-xs text-gray-500 mt-1">※0より大きい整数を入力。上記は仮の倍率です。</p>
+            </div>
+
+        </div>
+
+        <!-- コントロールエリア -->
+        <div class="flex flex-col md:flex-row justify-center items-center gap-4 mb-8">
+            <div class="flex flex-col items-center w-full md:w-1/3 p-4 bg-white rounded-xl shadow-inner">
+                <label for="sizeSlider" class="text-sm font-semibold text-gray-600 mb-2">ルーレットサイズ調整</label>
+                <!-- onclick属性を削除 -->
+                <input type="range" id="sizeSlider" min="200" max="600" value="450" class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer range-lg">
+                <span id="currentSize" class="text-xs text-gray-500 mt-1">450px</span>
+            </div>
+
+            <!-- onclick属性を削除 -->
+            <button id="prepareButton" class="w-full md:w-1/3 px-8 py-3 bg-pink-500 text-white font-bold rounded-xl shadow-lg hover:bg-pink-600 transition duration-150 transform hover:scale-105">
+                ルーレットを準備
+            </button>
+            <!-- onclick属性を削除 -->
+            <button id="spinButton" disabled class="w-full md:w-1/3 px-8 py-3 bg-red-500 text-white font-bold rounded-xl shadow-lg hover:bg-red-600 transition duration-150 transform hover:scale-105 disabled:bg-gray-400 disabled:cursor-not-allowed">
+                ルーレットスタート！
+            </button>
+        </div>
+
+        <!-- 結果表示 -->
+        <!-- 初期メッセージをHTML側で設定 -->
+        <div id="result" class="text-3xl font-extrabold text-center text-gray-700 min-h-[40px] mb-4 p-4 bg-yellow-100 rounded-xl shadow-inner">
+            例で表示している名前を参加者の名前に書き替えましょう。
+        </div>
+
+        <!-- ルーレット本体とポインター -->
+        <div id="wheelContainer" class="wheel-container">
+            <div class="pointer"></div>
+            <div id="wheel">
+                <!-- Conic Gradientによるルーレットの区画とラベルがここに描画されます -->
+            </div>
+        </div>
+
+        <!-- 🏆 過去の当選者リストを追加 -->
+        <div id="historyContainer" class="mt-8 bg-white p-6 rounded-xl shadow-lg w-full">
+            <h3 class="text-xl font-bold text-gray-700 mb-3">🏆 過去の当選者リスト</h3>
+            <ul id="winnerHistory" class="list-disc list-inside space-y-1 text-gray-600">
+                <!-- History items will go here -->
+            </ul>
+            <!-- onclick属性を削除 -->
+            <button id="resetButton" class="mt-4 px-4 py-2 bg-yellow-500 text-white font-bold rounded-lg shadow hover:bg-yellow-600 disabled:opacity-50 disabled:cursor-not-allowed">
+                当選者リストをリセット
+            </button>
+        </div>
+    </div>
+
+
+    <script>
+        // IIFE構造を削除し、コードを直接scriptタグ内で実行します。
+        // これにより、WordPressのサニタイザーによる構文エラーを防ぎます。
+        
+        // DOM要素の宣言 (DOMContentLoaded外で宣言)
+        var namesTextarea, weightsTextarea, wheel, spinButton, resultDisplay, wheelContainer, currentSizeDisplay, resetButton;
+
+        var participants = [];
+        var totalWeight = 0;
+        var isSpinning = false;
+        var drawnParticipants = []; // 🏆 当選者履歴を管理
+
+        var spinSound = null;
+        var winSound = null;
+
+        // 色のリスト（50名まで対応できるように多めに用意）
+        var colors = [
+            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF', '#FF9F40', '#E7E9ED',
+            '#A3E4D7', '#F5B7B1', '#85C1E9', '#A9CCE3', '#F9E79F', '#D7BDE2', '#EDBB99',
+            '#A9A9A9', '#7D3C98', '#27AE60', '#F1C40F', '#E67E22', '#3498DB', '#95A5A6',
+            '#1ABC9C', '#D35400', '#2C3E50', '#7F8C8D', '#9B59B6', '#F39C12', '#2ECC71',
+            '#C0392B', '#E6B0AA', '#D5F5E3', '#FCF3CF', '#A9DFBF', '#FADBD8', '#BB8FCE',
+            '#D6EAF8', '#A2D9CE', '#F9EBB9', '#F0B27A', '#CCD1D1', '#76448A', '#2E86C1',
+            '#27AE60', '#F1C40F', '#E67E22', '#3498DB', '#95A5A6', '#1ABC9C', '#D35400', '#2C3E50'
+        ];
+        var colorIndex = 0;
+
+        /**
+         * 背景色に応じてテキストのコントラストカラー（白または黒）を選択する
+         */
+        var getContrastColor = (hexcolor) => {
+            var r = parseInt(hexcolor.slice(1, 3), 16);
+            var g = parseInt(hexcolor.slice(3, 5), 16);
+            var b = parseInt(hexcolor.slice(5, 7), 16);
+            
+            // 輝度 (Luminance) の計算
+            var luminance = (0.299 * r + 0.587 * g + 0.114 * b + 0.1) / 255;
+            
+            // 輝度が0.5より大きければ（明るければ）黒、そうでなければ白
+            return (luminance > 0.5) ? '#000000' : '#ffffff';
+        };
+        
+        // --- Tone.js サウンド設定と制御 (Tone.jsが存在する場合のみ実行) ---
+        var drumRoll = null;
+
+        var initToneJs = () => {
+            if (typeof Tone === 'undefined') {
+                console.warn("Tone.js is not loaded. Sound effects will be disabled.");
+                return;
+            }
+            
+            // 🎼 ドラムロール音 (明るいチャイム)
+            spinSound = new Tone.Synth({ 
+                oscillator: { type: "triangle" }, 
+                envelope: {
+                    attack: 0.005,
+                    decay: 0.1,
+                    sustain: 0.1,
+                    release: 0.1
+                }
+            }).toDestination();
+            
+            // 勝利音
+            winSound = new Tone.PolySynth(Tone.AMSynth).toDestination();
+        };
+
+        /**
+         * ドラムロールの設定と開始
+         */
+        var startDrumRoll = (duration) => {
+            if (typeof Tone === 'undefined') return;
+            
+            // ブラウザの自動再生ポリシー対策で、ユーザーアクション（ボタンクリック）時にAudioContextを再開
+            if (Tone.context.state !== 'running') {
+                Tone.context.resume();
+            }
+
+            // ループが既に存在する場合は停止（念のため）
+            if (drumRoll) {
+                drumRoll.dispose();
+            }
+            
+            // ドラムロールの音のパターンを設定 (高めの明るい音 G4)
+            drumRoll = new Tone.Loop(function(time) {
+                if (spinSound) spinSound.triggerAttackRelease("G4", "16n", time); // G4で明るいチャイム音
+            }, "16n").start(0); 
+
+            Tone.Transport.bpm.value = 160;
+            Tone.Transport.start(); // BGMがないため、ここでトランスポートを開始
+        };
+        
+        /**
+         * ドラムロールの停止と勝利音
+         */
+        var stopDrumRollAndPlayWin = () => {
+            if (typeof Tone === 'undefined') return;
+
+            if (drumRoll) {
+                drumRoll.stop();
+                drumRoll.dispose();
+                drumRoll = null;
+            }
+            
+            // トランスポートを停止
+            Tone.Transport.stop();
+            
+            // 勝利のファンファーレ
+            if (winSound) winSound.triggerAttackRelease(["C4", "E4", "G4", "C5"], "1.5");
+        };
+
+
+        // --- サイズ調整機能 ---
+
+        /**
+         * ルーレットのサイズを更新する
+         */
+        var updateWheelSize = (size) => {
+            wheelContainer.style.width = size + 'px';
+            wheelContainer.style.height = size + 'px';
+            currentSizeDisplay.textContent = size + 'px';
+        };
+
+
+        // --- ルーレットロジック ---
+
+        /**
+         * ルーレットの準備: 入力値の解析とルーレットの描画
+         */
+        var prepareWheel = () => {
+            // DOM要素が利用可能かチェック (WordPress対策)
+            if (!namesTextarea || !weightsTextarea || !wheel) {
+                console.error("DOM elements not found during prepareWheel.");
+                return;
+            }
+
+            if (isSpinning) return;
+            
+            var nameLines = namesTextarea.value.trim().split('\n').map(line => line.trim()).filter(line => line.length > 0);
+            var weightLines = weightsTextarea.value.trim().split('\n').map(line => line.trim()).filter(line => line.length > 0);
+
+            if (nameLines.length === 0 || weightLines.length === 0 || nameLines.length !== weightLines.length) {
+                resultDisplay.textContent = '❌ エラー: 名前と倍率を正しく入力し、数が一致しているか確認してください。';
+                resultDisplay.classList.remove('text-green-600', 'result-animate');
+                resultDisplay.classList.add('text-red-500');
+                spinButton.disabled = true;
+                wheel.style.backgroundImage = 'none';
+                wheel.innerHTML = '';
+                return;
+            }
+
+            participants = [];
+            totalWeight = 0;
+            colorIndex = 0;
+
+            for (var i = 0; i < nameLines.length; i++) {
+                var name = nameLines[i];
+                var weight = parseInt(weightLines[i], 10); 
+                
+                if (name && weight > 0) {
+                    participants.push({
+                        name: name,
+                        weight: weight,
+                        color: colors[colorIndex % colors.length], 
+                        startAngle: 0,
+                        endAngle: 0
+                    });
+                    totalWeight += weight;
+                    colorIndex++;
+                }
+            }
+
+            if (participants.length === 0) {
+                resultDisplay.textContent = '❌ エラー: 有効な参加者データ（名前と正の倍率）がありません。';
+                spinButton.disabled = true;
+                wheel.style.backgroundImage = 'none';
+                wheel.innerHTML = '';
+                return;
+            }
+
+            drawWheel();
+            spinButton.disabled = false;
+            // テンプレートリテラルを置き換え
+            resultDisplay.textContent = '✅ ルーレット準備完了！総倍率: ' + totalWeight;
+            resultDisplay.classList.remove('text-red-500', 'result-animate', 'text-gray-700');
+            resultDisplay.classList.add('text-green-600');
+            // 準備完了時に抽選済みリストをチェックしてリセットボタンの状態を更新
+            document.getElementById('resetButton').disabled = drawnParticipants.length === 0;
+        };
+
+        /**
+         * ルーレットをConic Gradientで描画し、ルーレット内にラベルを配置する
+         */
+        var drawWheel = () => {
+            var gradientString = 'conic-gradient(';
+            var currentPercent = 0;
+            wheel.innerHTML = ''; 
+
+            participants.forEach(p => {
+                var percent = (p.weight / totalWeight) * 100;
+                var start = currentPercent;
+                var end = currentPercent + percent;
+                
+                p.startAngle = start * 3.6;
+                p.endAngle = end * 3.6;     
+
+                gradientString += p.color + ' ' + start + '% ' + end + '%, ';
+                
+                currentPercent = end;
+
+                // 2. ルーレット内のラベルを配置
+                var centerAngle = (p.startAngle + p.endAngle) / 2;
+                
+                var labelContainer = document.createElement('div');
+                labelContainer.className = 'label-container';
+                labelContainer.style.transform = 'rotate(' + (centerAngle - 90) + 'deg)'; 
+                
+                var textElement = document.createElement('div');
+                textElement.className = 'wheel-label-text flex items-center justify-start pointer-events-none';
+                
+                // 距離を70に増やして、外側へ配置
+                var distance = 70; 
+                var rotateBack = 90 - centerAngle;
+                textElement.style.transform = 'translateY(-50%) translateX(' + distance + '%) rotate(' + rotateBack + 'deg)';
+                
+                textElement.style.color = getContrastColor(p.color);
+                
+                var nameDisplay = p.name.length > 8 ? p.name.substring(0, 8) + '...' : p.name; 
+                // 倍率表記を削除し、フォントサイズを text-xs に変更
+                textElement.innerHTML = '<span class="text-xs font-bold leading-tight" style="background-color: rgba(255, 255, 255, 0.2); padding: 2px 4px; border-radius: 4px;">' + nameDisplay + '</span>';
+
+                labelContainer.appendChild(textElement);
+                wheel.appendChild(labelContainer);
+            });
+
+            // 3. CSSに適用
+            gradientString = gradientString.slice(0, -2) + ')';
+            wheel.style.backgroundImage = gradientString;
+            wheel.style.transform = 'rotate(0deg)';
+        };
+
+        /**
+         * 抽選ロジック: 重み付きランダム選択 (未当選者から選ぶ)
+         */
+        var selectWinner = () => {
+            // 🏆 未当選者リストを作成
+            var availableParticipants = participants.filter(p => drawnParticipants.indexOf(p.name) === -1);
+
+            if (availableParticipants.length === 0) {
+                return null; // 全員当選済
+            }
+
+            // 未当選者のみの総倍率
+            var availableTotalWeight = availableParticipants.reduce(function(sum, p) { return sum + p.weight; }, 0);
+            var randomValue = Math.random() * availableTotalWeight;
+            var cumulativeWeight = 0;
+
+            for (var i = 0; i < availableParticipants.length; i++) {
+                var p = availableParticipants[i];
+                cumulativeWeight += p.weight;
+                if (randomValue < cumulativeWeight) {
+                    return p;
+                }
+            }
+            return availableParticipants[availableParticipants.length - 1]; 
+        };
+
+        /**
+         * ルーレットの回転を開始する
+         */
+        var spinWheel = () => {
+            if (isSpinning) return;
+            if (participants.length < 1) {
+                resultDisplay.textContent = '❌ 参加者データがありません。「ルーレットを準備」を押してください。';
+                resultDisplay.classList.add('text-red-500');
+                return;
+            }
+
+            // 🏆 未当選者から選択
+            var winner = selectWinner(); 
+
+            if (!winner) {
+                // 全員当選済みの処理
+                resultDisplay.textContent = '⚠️ 全員が当選しました！リストをリセットしてください。';
+                resultDisplay.classList.remove('text-gray-700', 'result-animate');
+                resultDisplay.classList.add('text-red-500');
+                spinButton.disabled = false;
+                isSpinning = false;
+                return;
+            }
+
+
+            isSpinning = true;
+            spinButton.disabled = true;
+            
+            // 1. 回転中は期待感を煽るメッセージを表示
+            // テンプレートリテラルを置き換え
+            resultDisplay.textContent = '🎯 果たして、栄光を掴むのは誰だ！？ 回転中！';
+            resultDisplay.classList.remove('text-red-500', 'text-green-600', 'result-animate');
+            resultDisplay.classList.add('text-gray-700'); // 回転中の色
+            
+            // --- 修正点: 回転をリセットし、常に同じ挙動になるようにする ---
+            wheel.style.transitionDuration = '0s'; // トランジションを一時的に無効化
+            wheel.style.transform = 'rotate(0deg)'; // 回転を0にリセット
+            void wheel.offsetWidth; // 強制的にDOM再描画を待つ
+
+            // 2. 新しい回転時間をランダムに決定 (4秒から7秒の間)
+            var spinDuration = Math.random() * 3 + 4; // 4.0 ~ 6.99...秒
+            wheel.style.transitionDuration = spinDuration + 's'; 
+            // -----------------------------------------------------------------
+
+            // 3. ドラムロールを開始
+            startDrumRoll(spinDuration);
+
+            
+            // どの区画に止まるか計算
+            var target = participants.find(p => p.name === winner.name);
+            var targetAngle = (target.startAngle + target.endAngle) / 2;
+            
+            var offset = 360 - targetAngle; 
+            var minRotations = 5; 
+            var finalRotation = (minRotations * 360) + offset + (Math.random() * 30 - 15); 
+            
+            wheel.style.transform = 'rotate(' + finalRotation + 'deg)';
+
+            // 4. 回転時間に合わせて結果を表示
+            setTimeout(function() {
+                stopDrumRollAndPlayWin(); // ドラムロールを停止し、勝利音を再生
+                
+                isSpinning = false;
+                spinButton.disabled = false;
+                
+                // 🏆 当選者を履歴に追加
+                drawnParticipants.push(winner.name);
+                updateWinnerHistory(winner); // 履歴更新
+                
+                // テンプレートリテラルを置き換え
+                resultDisplay.textContent = '🎉 当選者は... ' + winner.name + ' です！'; // 最終結果
+                resultDisplay.classList.remove('text-gray-700', 'text-green-600');
+                resultDisplay.classList.add('text-red-500', 'result-animate');
+            }, spinDuration * 1000); // ミリ秒に変換
+        };
+        
+        /**
+         * 🏆 当選者リストをUIに更新する
+         */
+        var updateWinnerHistory = (newWinner) => {
+            var historyList = document.getElementById('winnerHistory');
+            var resetBtn = document.getElementById('resetButton');
+
+            // リストに新しい当選者を追加
+            var listItem = document.createElement('li');
+            var winnerInfo = participants.find(p => p.name === newWinner.name);
+            // 当選者に色を付けて見やすくする
+            // テンプレートリテラルを置き換え
+            listItem.innerHTML = '<span style="color: ' + winnerInfo.color + '; font-weight: bold;">' + winnerInfo.name + '</span> が当選しました！(倍率: ' + winnerInfo.weight + ')';
+            historyList.appendChild(listItem);
+            
+            // リセットボタンを有効化
+            if (drawnParticipants.length > 0) {
+                resetBtn.disabled = false;
+            }
+        };
+
+        /**
+         * 🏆 当選者リストをリセットする
+         */
+        var resetLottery = () => {
+            drawnParticipants = [];
+            document.getElementById('winnerHistory').innerHTML = '';
+            document.getElementById('resetButton').disabled = true;
+            
+            // ルーレットを再描画して初期状態に戻す
+            prepareWheel(); 
+            // テンプレートリテラルを置き換え
+            resultDisplay.textContent = '🎉 抽選がリセットされ、全員が抽選対象に戻りました！';
+            resultDisplay.classList.remove('text-red-500', 'result-animate');
+            resultDisplay.classList.add('text-green-600');
+        };
+
+
+        /**
+         * 🖼️ 背景に動物の絵文字をランダムに配置する
+         */
+        var addRandomEmojis = () => {
+            var emojis = ['🐶', '🐱', '🐰', '🐾', '✨', '💖', '⭐', '🎈', '🎁', '🎀'];
+            var count = 35; // 20から35に増加してバランス改善
+
+            for (var i = 0; i < count; i++) {
+                var emoji = document.createElement('span');
+                emoji.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+                
+                // ランダムな位置 (vh/vw: ビューポートの高さ/幅に対するパーセンテージ)
+                var top = Math.random() * 100; // 0% to 100%
+                var left = Math.random() * 100; // 0% to 100%
+                var rotation = Math.random() * 360; 
+
+                // ランダムなサイズ (25px to 40px)
+                var size = Math.random() * 15 + 25; 
+
+                emoji.style.position = 'fixed';
+                emoji.style.top = top + 'vh';
+                emoji.style.left = left + 'vw';
+                emoji.style.fontSize = size + 'px';
+                emoji.style.opacity = Math.random() * 0.4 + 0.3; // 0.3 to 0.7 opacity
+                emoji.style.transform = 'rotate(' + rotation + 'deg)';
+                emoji.style.pointerEvents = 'none'; // クリックが下の要素に届くように
+                emoji.style.userSelect = 'none';
+                emoji.style.zIndex = '-1'; // 最背面
+                
+                document.body.appendChild(emoji);
+            }
+        };
+
+        // 初期設定
+        document.addEventListener('DOMContentLoaded', function() {
+            
+            try {
+                // 1. DOM要素の取得
+                namesTextarea = document.getElementById('names');
+                weightsTextarea = document.getElementById('weights');
+                wheel = document.getElementById('wheel');
+                spinButton = document.getElementById('spinButton');
+                resultDisplay = document.getElementById('result');
+                wheelContainer = document.getElementById('wheelContainer');
+                currentSizeDisplay = document.getElementById('currentSize');
+                resetButton = document.getElementById('resetButton');
+
+                // 2. イベントリスナーの設定 (onclick属性を削除した代わりに、ここで動的に設定)
+                document.getElementById('prepareButton').addEventListener('click', prepareWheel);
+                spinButton.addEventListener('click', spinWheel);
+                resetButton.addEventListener('click', resetLottery);
+                
+                var sizeSlider = document.getElementById('sizeSlider');
+                sizeSlider.addEventListener('input', function(e) { updateWheelSize(e.target.value); });
+
+                // 3. Tone.jsの初期化
+                initToneJs();
+
+                // 4. ランダムな絵文字の配置
+                addRandomEmojis(); 
+
+                // 5. ルーレットの初期設定 (初期データで描画)
+                prepareWheel(); 
+                
+                console.log("Roulette App: Initialization complete and listeners attached. Final structural fix applied.");
+                
+            } catch (e) {
+                console.error("Roulette App Initialization Error (FATAL):", e);
+                if (resultDisplay) {
+                    resultDisplay.textContent = '致命的なエラーが発生しました。ブラウザのコンソールログを確認してください。';
+                    resultDisplay.classList.add('text-red-500');
+                }
+            }
+        });
+    </script>
+</body>
+</html>
